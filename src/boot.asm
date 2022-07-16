@@ -19,17 +19,15 @@ mov si, booting
 call print
 
 mov edi, 0x1000;读取到的目的内存
-mov ecx, 0;起始扇区
-mov bl, 1;扇区的数量
+mov ecx, 2;起始扇区，loader的扇区起始位置
+mov bl, 4;扇区的数量
 
 call read_disk
 
-xchg bx, bx
+cmp word [0x1000], 0x55aa
+jnz error
 
-mov edi, 0x1000;读取的起始地址
-mov ecx, 1;起始扇区
-mov bl, 1;扇区的数量
-call write_disk
+jmp 0:0x1002
 
 ; 阻塞(无限循环)
 jmp $
@@ -101,74 +99,6 @@ read_disk:
             loop .readw
         ret
 
-
-write_disk:
-    ;设置读写扇区的数量
-    mov dx, 0x1f2
-    mov al, bl
-    out dx, al
-
-    inc dx;0x1f3
-    mov al, cl;低8位
-    out dx, al
-
-    inc dx;0x1f4
-    shr ecx, 8
-    mov al, cl;中8位
-    out dx, al
-
-    inc dx;0x1f5
-    shr ecx, 8
-    mov al, cl;高8位
-    out dx, al
-
-    inc dx;0x1f6
-    shr ecx, 8
-    and cl, 0b1111; 高4位置为 0
-
-    mov al, 0b1110_0000
-    or al, cl
-    out dx, al;主盘 LBA 模式
-
-    inc dx;0x1f7
-    mov al, 0x30 ;写硬盘
-    out dx, al
-
-    xor ecx, ecx
-    mov cl, bl;得到写扇区的数量
-
-    .write:
-        push cx
-        call .writes;写一个扇区
-        call .waits;等待数据写入完毕
-        
-        pop cx
-        loop .write
-    ret
-
-    .waits:
-        mov dx, 0x1f7
-        .check:
-            in al, dx
-            jmp $+2; nop
-            jmp $+2; nop
-            jmp $+2; nop
-            and al, 0b1000_0000
-            cmp al, 0
-            jnz .check
-        ret
-    .writes:
-        mov dx, 0x1f0
-        mov cx, 256;一个扇区256个字
-        .writew:
-            mov ax, [edi]
-            out dx, ax
-            jmp $+2;nop
-            jmp $+2;nop
-            jmp $+2;nop
-            add edi, 2
-            loop .writew
-        ret
 
 print:
     mov ah, 0x0e;INT 10h / AH = 0Eh - teletype output.
