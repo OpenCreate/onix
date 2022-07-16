@@ -23,7 +23,7 @@ example:
 >xchg bx, bx;  bochs 魔术断点
 
 print功能的实现
-```s
+```x86asm
 mov si, booting
 call print
 
@@ -33,7 +33,7 @@ jmp $
 print:
     mov ah, 0x0e
 .next:
-    mov al, [si]
+    mov al, [si] ;将 si 指向的一个byte 取出来放入 al 中
     cmp al, 0
     jz .done
     int 0x10
