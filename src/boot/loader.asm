@@ -2,13 +2,13 @@
 
 dw 0x55aa;magic number 用于判断错误
 
-xchg bx, bx
 
 mov si, loading
 call print
 
 
 detect_memory:
+    xchg bx, bx
     xor ebx, ebx
 
     ;es:di 结构体缓存位置
@@ -38,6 +38,7 @@ detect_memory:
     mov si, detecting
     call print
 
+    xchg bx, bx
     jmp prepare_protected_mode
 
 print:
@@ -64,7 +65,6 @@ error:
     .msg db "Loading Error", 10, 13, 0;\n\r
 
 prepare_protected_mode:
-    xchg bx, bx
     cli;关闭中断
     ;打开 A20 地址线
     in al, 0x92
@@ -93,10 +93,83 @@ protect_mode:
 
     mov esp, 0x10000;修改栈顶
 
-    mov byte [0xb8000], 'P'
-    mov byte [0x20000], 'P'
+    mov edi, 0x10000; 读取到的目标内存
+    mov ecx, 10;起始扇区
+    mov bl, 200;扇区数量
+
+    call read_disk
+
+    jmp dword code_selector:0x10000
     
-    jmp $
+    ud2; 表示出错
+
+read_disk:
+    ;设置读写扇区的数量
+    mov dx, 0x1f2
+    mov al, bl
+    out dx, al
+
+    inc dx;0x1f3
+    mov al, cl;低8位
+    out dx, al
+
+    inc dx;0x1f4
+    shr ecx, 8
+    mov al, cl;中8位
+    out dx, al
+
+    inc dx;0x1f5
+    shr ecx, 8
+    mov al, cl;高8位
+    out dx, al
+
+    inc dx;0x1f6
+    shr ecx, 8
+    and cl, 0b1111; 高4位置为 0
+
+    mov al, 0b1110_0000
+    or al, cl
+    out dx, al;主盘 LBA 模式
+
+    inc dx;0x1f7
+    mov al, 0x20 ;读硬盘
+    out dx, al
+
+    xor ecx, ecx
+    mov cl, bl;得到读取扇区的数量
+
+    .read:
+        push cx
+        call .waits;等待数据准备完毕
+        call .reads;读取一个扇区
+        pop cx
+        loop .read
+    ret
+
+    .waits:
+        mov dx, 0x1f7
+        .check:
+            in al, dx
+            jmp $+2; nop
+            jmp $+2; nop
+            jmp $+2; nop
+            and al, 0b1000_1000;获取第3位和第7位的值
+            cmp al, 0b0000_1000
+            jnz .check
+        ret
+    .reads:
+        mov dx, 0x1f0
+        mov cx, 256;一个扇区256个字
+        .readw:
+            in ax, dx
+            jmp $+2;nop
+            jmp $+2;nop
+            jmp $+2;nop
+            mov [edi], ax
+            add edi, 2
+            loop .readw
+        ret
+
 
 code_selector equ (1<<3) ;index 1 位置
 data_selector equ (2<<3) ;index 2 位置
@@ -111,12 +184,12 @@ gdt_ptr:
 gdt_base:
     dd 0, 0; NULL 描述符 8个字节
 gdt_code:
-    dw memory_limit & 0xffff;段界限0-15
-    dw memory_base & 0xffff;基地址 0-15
-    db (memory_base >> 16) & 0xff;基地址 16-23
+    dw memory_limit & 0xffff;段长度 0-15
+    dw memory_base & 0xffff;基地址 16-31
+    db (memory_base >> 16) & 0xff;基地址 32-39
     db 0b_1_00_1_1_0_1_0
     db 0b1_1_0_0_0000
-    db (memory_base >> 24) &0xff; 基地址 24-31
+    db (memory_base >> 24) &0xff; 基地址 57-63
 gdb_data:
     dw memory_limit & 0xffff;段长度 0-15
     dw memory_base & 0xffff;基地址 16-31

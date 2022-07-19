@@ -12,9 +12,6 @@ mov ss, ax
 mov sp, 0x7c00
 
 
-;断点
-xchg bx, bx
-
 mov si, booting
 call print
 
