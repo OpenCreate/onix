@@ -14,8 +14,10 @@ Executable and Linkable Format
 
 ## 程序分析
 
-```c++
+```c
 #include <stdio.h>
+char msg[] = "Hello World!!!"; // .data
+char buf[16]; // .bss
 
 int main()
 {
